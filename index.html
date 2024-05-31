@@ -8,11 +8,47 @@
             padding: 0;
             margin: 0;
             overflow: hidden;
+            font-family: Arial, serif;
         }
+
+        #info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 20px;
+
+            border-radius: 20px;
+            border: 2px solid blue;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #zoom:before {
+            content: "Zoom: ";
+        }
+
+        #translateX:before {
+            content: "X: ";
+        }
+
+        #translateY:before {
+            content: "Y: ";
+        }
+
+        #times:before {
+            content: "Times: ";
+        }
+
     </style>
 </head>
 <body>
 <canvas id="canvas" height="1000" width="1000"></canvas>
+<div id="info">
+    <div id="zoom">1</div>
+    <div id="translateX">0</div>
+    <div id="translateY">0</div>
+    <div id="times">1</div>
+</div>
 <script src="main.js"></script>
 </body>
 </html>
