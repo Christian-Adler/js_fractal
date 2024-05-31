@@ -47,9 +47,17 @@ function draw() {
         const H = d > 200;
 
         if (H) {
-          let r = t * 3 * ((dimX - x) / dimX);
-          let g = t * 1.5 * (y / dimY);
-          let b = t * 2.5 * (x / dimX);
+          let r = g = b = t;
+          // let r = t; // * 3 * ((dimX - x) / dimX);
+          // let g = t; // * 1.5 * (y / dimY);
+          // let b = t; // * 2.5 * (x / dimX);
+
+          r = r * ((dimX - x) / dimX); //
+          b = b * (x / dimX); //
+          g = g * (y / dimY); //
+
+          r *= 3;
+
           atom(x, y, `rgb(${r},${g},${b})`);
           break;
         }
