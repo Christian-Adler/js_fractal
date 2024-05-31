@@ -15,8 +15,41 @@ const atom = (x, y, c) => {
   ctx.fillRect(x, y, 3, 3);
 };
 
+function calcTData(yStart, yEnd, dimX, centerX, centerY) {
+  const tData = [];
+
+  // calc t values
+  for (let y = yStart; y < yEnd; y++) {
+    for (let x = 0; x < dimX; x++) {
+      const dx = (x - centerX) / zoom - translateX;
+      const dy = (y - centerY) / zoom - translateY;
+
+      let a = dx;
+      let b = dy;
+
+      let tDat = -1;
+      for (let t = 0; t < times; t++) {
+
+        const d = a ** 2 - b ** 2 + dx;
+        b = 2 * (a * b) + dy;
+        a = d;
+
+        const H = d > 200;
+
+        if (H) {
+          tDat = t;
+          break;
+        }
+      }
+
+      tData.push(tDat);
+    }
+  }
+  return tData;
+}
+
 function draw() {
-  times = Math.max(100, zoom / 100 * 2);
+  times = Math.max(200, zoom / 100 * 2);
   zoomDiv.innerHTML = zoom;
   translateXDiv.innerHTML = translateX;
   translateYDiv.innerHTML = translateY;
@@ -27,41 +60,36 @@ function draw() {
 
   const dimX = canvas.width;
   const dimY = canvas.height;
-  const centerX = dimX / 2;
-  const centerY = dimY / 2;
+  const centerX = Math.floor(dimX / 2);
+  const centerY = Math.floor(dimY / 2);
 
-  for (let y = 0; y < dimY; y++) {
-    for (let x = 0; x < dimX; x++) {
-      const dx = (x - centerX) / zoom - translateX;
-      const dy = (y - centerY) / zoom - translateY;
+  // ctx.fillStyle = 'black';
+  // ctx.fillRect(0, 0, dimX, dimY);
 
-      let a = dx;
-      let b = dy;
+  const tData = [
+    ...calcTData(0, dimY / 4, dimX, centerX, centerY),
+    ...calcTData(dimY / 4, dimY, dimX, centerX, centerY)
+  ];
 
-      for (let t = 0; t < times; t++) {
+  // draw
+  for (let i = 0; i < tData.length; i++) {
+    const t = tData[i];
+    if (t < 0) continue;
 
-        const d = a ** 2 - b ** 2 + dx;
-        b = 2 * (a * b) + dy;
-        a = d;
+    const x = i % dimX;
+    const y = Math.floor(i / dimX);
 
-        const H = d > 200;
+    let r, g, b;
+    r = g = b = t;
 
-        if (H) {
-          let r, g, b;
-          r = g = b = t;
+    // colorize by position
+    r = r * ((dimX - x) / dimX); //
+    b = b * (x / dimX); //
+    g = g * (y / dimY); //
 
-          // colorize by position
-          r = r * ((dimX - x) / dimX); //
-          b = b * (x / dimX); //
-          g = g * (y / dimY); //
+    r *= 3;
 
-          r *= 3;
-
-          atom(x, y, `rgb(${r},${g},${b})`);
-          break;
-        }
-      }
-    }
+    atom(x, y, `rgb(${r},${g},${b})`);
   }
 }
 
