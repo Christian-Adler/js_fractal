@@ -1,121 +1,155 @@
-const zoomDiv = document.getElementById("zoom");
-const translateXDiv = document.getElementById("translateX");
-const translateYDiv = document.getElementById("translateY");
-const timesDiv = document.getElementById("times");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+if (window.Worker) {
+  const numWorkers = 8;
 
-let zoom = 1; // 100000 // 2000;
-let times = 10; // 2000;
-let translateX = 0; // 0.233; //0.12
-let translateY = 0; // 0.655; // 0.82
+  const zoomDiv = document.getElementById("zoom");
+  const translateXDiv = document.getElementById("translateX");
+  const translateYDiv = document.getElementById("translateY");
+  const timesDiv = document.getElementById("times");
+  const durationCalcDiv = document.getElementById("durationCalc");
+  const durationDrawDiv = document.getElementById("durationDraw");
 
-const atom = (x, y, c) => {
-  ctx.fillStyle = c;
-  ctx.fillRect(x, y, 3, 3);
-};
+  const workers = [];
+  let workerAnswersReceived = 0;
+  let inProgress = false;
+  let reCalc = false;
+  let startCalc = 0;
 
-function calcTData(yStart, yEnd, dimX, centerX, centerY) {
-  const tData = [];
-
-  // calc t values
-  for (let y = yStart; y < yEnd; y++) {
-    for (let x = 0; x < dimX; x++) {
-      const dx = (x - centerX) / zoom - translateX;
-      const dy = (y - centerY) / zoom - translateY;
-
-      let a = dx;
-      let b = dy;
-
-      let tDat = -1;
-      for (let t = 0; t < times; t++) {
-
-        const d = a ** 2 - b ** 2 + dx;
-        b = 2 * (a * b) + dy;
-        a = d;
-
-        const H = d > 200;
-
-        if (H) {
-          tDat = t;
-          break;
+  for (let i = 0; i < numWorkers; i++) {
+    const worker = new Worker("worker.js");
+    const w = {num: i, tData: [], worker};
+    worker.onmessage = function (e) {
+      // console.log('Message received from worker: ' + e.data);
+      w.tData = JSON.parse(e.data);
+      workerAnswersReceived++;
+      if (workerAnswersReceived === numWorkers) {
+        durationCalcDiv.innerHTML = '' + (new Date().getTime() - startCalc);
+        drawTData();
+        if (reCalc) {
+          reCalc = false;
+          calcTData();
         }
       }
+    }
+    workers.push(w);
+  }
 
-      tData.push(tDat);
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  let zoom = 1;
+  let times = 10;
+  let translateX = 0;
+  let translateY = 0;
+
+  const atom = (x, y, c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x, y, 3, 3);
+  };
+
+  function calcTData() {
+    if (inProgress) return;
+    inProgress = true;
+    workerAnswersReceived = 0;
+    startCalc = new Date().getTime();
+
+    times = Math.max(200, zoom / 100 * 2);
+    zoomDiv.innerHTML = zoom;
+    translateXDiv.innerHTML = translateX;
+    translateYDiv.innerHTML = translateY;
+    timesDiv.innerHTML = times;
+
+    if (canvas.height !== window.innerHeight)
+      canvas.height = window.innerHeight;
+    if (canvas.width !== window.innerWidth)
+      canvas.width = window.innerWidth;
+
+    const dimX = canvas.width;
+    const dimY = canvas.height;
+    const centerX = Math.floor(dimX / 2);
+    const centerY = Math.floor(dimY / 2);
+
+    const yRange = Math.ceil(dimY / numWorkers);
+    for (let i = 0; i < numWorkers; i++) {
+      const workersItem = workers[i];
+      workersItem.worker.postMessage(JSON.stringify({
+            yStart: i * yRange,
+            yEnd: (i + 1) * yRange,
+            dimX, centerX, centerY, translateX, translateY, zoom, times
+          })
+      );
     }
   }
-  return tData;
-}
 
-function draw() {
-  times = Math.max(200, zoom / 100 * 2);
-  zoomDiv.innerHTML = zoom;
-  translateXDiv.innerHTML = translateX;
-  translateYDiv.innerHTML = translateY;
-  timesDiv.innerHTML = times;
+  function drawTData() {
+    const t1 = new Date().getTime();
+    const dimX = canvas.width;
+    const dimY = canvas.height;
 
-  canvas.height = window.innerHeight;
-  canvas.width = window.innerWidth;
+    let tData = [];
+    for (const workersItem of workers) {
+      tData = [...tData, ...workersItem.tData];
+    }
 
-  const dimX = canvas.width;
-  const dimY = canvas.height;
-  const centerX = Math.floor(dimX / 2);
-  const centerY = Math.floor(dimY / 2);
+    // draw
 
-  // ctx.fillStyle = 'black';
-  // ctx.fillRect(0, 0, dimX, dimY);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, dimX, dimY);
 
-  const tData = [
-    ...calcTData(0, dimY / 4, dimX, centerX, centerY),
-    ...calcTData(dimY / 4, dimY, dimX, centerX, centerY)
-  ];
+    for (let i = 0; i < tData.length; i++) {
+      const t = tData[i];
+      if (t < 0) continue;
 
-  // draw
-  for (let i = 0; i < tData.length; i++) {
-    const t = tData[i];
-    if (t < 0) continue;
+      const x = i % dimX;
+      const y = Math.floor(i / dimX);
 
-    const x = i % dimX;
-    const y = Math.floor(i / dimX);
+      let r, g, b;
+      r = g = b = t;
 
-    let r, g, b;
-    r = g = b = t;
+      // colorize by position
+      r = r * ((dimX - x) / dimX); //
+      b = b * (x / dimX); //
+      g = g * (y / dimY); //
 
-    // colorize by position
-    r = r * ((dimX - x) / dimX); //
-    b = b * (x / dimX); //
-    g = g * (y / dimY); //
+      r *= 3;
 
-    r *= 3;
+      atom(x, y, `rgb(${r},${g},${b})`);
+    }
 
-    atom(x, y, `rgb(${r},${g},${b})`);
+    const t2 = new Date().getTime();
+    durationDrawDiv.innerHTML = '' + (t2 - t1);
+    inProgress = false;
   }
+
+  calcTData();
+
+  let timer = null;
+
+  window.addEventListener("resize", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      reCalc = true;
+      calcTData();
+    }, 400);
+  });
+
+  window.addEventListener("click", (evt) => {
+    if (inProgress) return;
+    translateX += (window.innerWidth / 2 - evt.x) * (1 / zoom);
+    translateY += (window.innerHeight / 2 - evt.y) * (1 / zoom);
+    zoom *= 10;
+    calcTData();
+  });
+  window.addEventListener("contextmenu", (evt) => {
+    if (zoom >= 10 && !inProgress) {
+      translateX -= (window.innerWidth / 2 - evt.x) * (1 / zoom);
+      translateY -= (window.innerHeight / 2 - evt.y) * (1 / zoom);
+      zoom /= 10;
+      calcTData();
+    }
+    evt.preventDefault();
+    return false;
+  });
+
+} else {
+  console.log('Your browser doesn\'t support web workers.');
 }
-
-
-draw();
-
-let timer = null;
-
-window.addEventListener("resize", () => {
-  clearTimeout(timer);
-  timer = setTimeout(draw, 400);
-});
-
-window.addEventListener("click", (evt) => {
-  translateX += (window.innerWidth / 2 - evt.x) * (1 / zoom);
-  translateY += (window.innerHeight / 2 - evt.y) * (1 / zoom);
-  zoom *= 10;
-  draw();
-});
-window.addEventListener("contextmenu", (evt) => {
-  if (zoom >= 10) {
-    translateX -= (window.innerWidth / 2 - evt.x) * (1 / zoom);
-    translateY -= (window.innerHeight / 2 - evt.y) * (1 / zoom);
-    zoom /= 10;
-    draw();
-  }
-  evt.preventDefault();
-  return false;
-});
