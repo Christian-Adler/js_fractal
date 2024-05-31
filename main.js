@@ -5,6 +5,7 @@ if (window.Worker) {
   const translateXDiv = document.getElementById("translateX");
   const translateYDiv = document.getElementById("translateY");
   const timesDiv = document.getElementById("times");
+  const inProgressDiv = document.getElementById("inProgress");
   const durationCalcDiv = document.getElementById("durationCalc");
   const durationDrawDiv = document.getElementById("durationDraw");
 
@@ -41,18 +42,14 @@ if (window.Worker) {
   let translateX = 0;
   let translateY = 0;
 
-  const atom = (x, y, c) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(x, y, 3, 3);
-  };
-
   function calcTData() {
     if (inProgress) return;
     inProgress = true;
+    inProgressDiv.innerHTML = `${inProgress}`;
     workerAnswersReceived = 0;
     startCalc = new Date().getTime();
 
-    times = Math.max(200, zoom / 100 * 2);
+    times = Math.min(20000, Math.max(200, zoom / 100 * 2));
     zoomDiv.innerHTML = zoom;
     translateXDiv.innerHTML = translateX;
     translateYDiv.innerHTML = translateY;
@@ -90,14 +87,39 @@ if (window.Worker) {
       tData = [...tData, ...workersItem.tData];
     }
 
+    if (canvas.height !== window.innerHeight || canvas.width !== window.innerWidth) {
+      console.log('Data not matching to size...');
+      inProgress = false;
+      inProgressDiv.innerHTML = `${inProgress}`;
+      calcTData();
+      return;
+    }
+
     // draw
 
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, dimX, dimY);
+    const data = ctx.createImageData(dimX, dimY);
+    const buf = new Uint32Array(data.data.buffer);
+
+    function drawIntoBuffer(i, colorValue) {
+      const idxs = [i, i - dimX, i + dimX];
+      for (const idx of idxs) {
+        if (idx >= 0 && idx < tData.length) {
+          buf[idx] = colorValue;
+
+          if (idx > 0)
+            buf[idx - 1] = colorValue;
+          if (idx < tData.length - 1)
+            buf[idx + 1] = colorValue;
+        }
+      }
+    }
 
     for (let i = 0; i < tData.length; i++) {
       const t = tData[i];
-      if (t < 0) continue;
+      if (t < 0) {
+        buf[i] = 0xFFFFFFFF;
+        continue;
+      }
 
       const x = i % dimX;
       const y = Math.floor(i / dimX);
@@ -112,12 +134,21 @@ if (window.Worker) {
 
       r *= 3;
 
-      atom(x, y, `rgb(${r},${g},${b})`);
+      // buf[i] = 0xa00000F0;
+      const colorValue = (255 << 24) |    // alpha
+          (b << 16) |    // blue
+          (g << 8) |    // green
+          r; // red
+      drawIntoBuffer(i, colorValue);
     }
+
+
+    ctx.putImageData(data, 0, 0);
 
     const t2 = new Date().getTime();
     durationDrawDiv.innerHTML = '' + (t2 - t1);
     inProgress = false;
+    inProgressDiv.innerHTML = `${inProgress}`;
   }
 
   calcTData();
